@@ -22,6 +22,8 @@
      :methods [^:static [build [] io.dropwizard.auth.Authenticator] 
               ])
 
+(defn clear-users! "should only exist for testing" []
+  (reset! users {}))
 
 (defn add-user "adds user data with key to stored users" [x m]
   (log/info "Adding user " x)
@@ -59,27 +61,47 @@
   )
 )
 
-(defn subscribe [mu]
-  (let [ch (cl/with-muon mu (cl/subscribe! "stream://photon/stream"
-                        :from 0
-                        :stream-type "hot-cold"
-                        :stream-name "authorised-user-events"))]
-  (go (loop [elem (<!! ch)] (handle-streamed-event elem) (recur (<!! ch))))))
+;(defn subscribe [mu]
+;  (let [ch (cl/with-muon mu (cl/subscribe! "stream://photon/stream"
+;                        :from 0
+;                        :stream-type "hot-cold"
+;                        :stream-name "authorised-user-events"))]
+;  (go (loop [elem (<!! ch)] (handle-streamed-event elem) (recur (<!! ch))))))
 
-;Goes at the end as it depends on the rest
-(defn java-build
-  "creates a authenticator"
-  []
-  (log/info "creating Authenticator")
-  (subscribe (cl/muon-client "amqp://localhost" "demo-app" "example"))
-  (reify io.dropwizard.auth.Authenticator 
-    (^Optional authenticate [this c]
-      (log/info "authenticating user" (.getUsername c))
+(defn authenticate "Accepts dropwizard basic credentials and authenticates" [c]
+  (log/info "authenticating user" (.getUsername c))
       (if (find-user (.getUsername c))
           (Optional/of (AuthenticatedUser. (.getUsername c) (:roles (find-user (.getUsername c)))))
           (Optional/absent)
         )
       )
+
+(defn process-hot-channel 
+  "Expects two functions a no arg to create the channel and a single arg to handle events placed on the channel" 
+  [cf hf]
+  (let [ch (cf)]
+    (go (loop [elem (<!! ch)] (hf elem) (recur (<!! ch))))))
+
+
+(defn authorised-user-subscription [mu]
+  (fn [] (cl/with-muon mu (cl/subscribe! "stream://photon/stream"
+                        :from 0
+                        :stream-type "hot-cold"
+                        :stream-name "authorised-user-events")))
+  )
+
+
+
+;Goes at the end as it depends on the rest
+(defn java-build
+  "creates a authenticator"
+  [mu]
+  (log/info "creating Authenticator")
+  (process-hot-channel (authorised-user-subscription mu) (handle-streamed-event))
+  (reify io.dropwizard.auth.Authenticator 
+    (^Optional authenticate [this c]
+      (authenticate c)
     )
+  )
  )
 

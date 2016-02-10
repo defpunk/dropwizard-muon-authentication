@@ -7,7 +7,8 @@
   :prep-tasks ["javac" "compile"]
   :aot :all
   :dependencies [[org.clojure/clojure "1.7.0"] 
-                 [io.muoncore/muon-clojure "6.4-20160113114701"] 
+                 [io.muoncore/muon-clojure "6.4-20160113114701"
+                   :exclusions [[org.slf4j/slf4j-log4j12]]] 
                  [io.dropwizard/dropwizard-auth "0.8.4"] 
                  [org.clojure/tools.logging "0.3.1"]]
 )
