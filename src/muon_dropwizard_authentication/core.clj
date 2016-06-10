@@ -1,10 +1,12 @@
 (ns muon-dropwizard-authentication.core
    (:require [muon-clojure.client :as cl] 
+            [photon-client.core :as pc] 
             [clojure.core.async :as async :refer [go <! <!!]]
             [clojure.tools.logging :as log] )
  (:import
         [io.dropwizard.auth AuthenticationException]
  	      [io.dropwizard.auth Authenticator]
+        [io.muoncore.MultiTransportMuon]
  	      [io.dropwizard.auth.basic BasicCredentials]
  	      [com.google.common.base Optional]
  	      [java.security Principal]
@@ -19,7 +21,7 @@
     :main false
     :name com.qwickr.muon.auth.AuthenticatorFactory
      :prefix java-
-     :methods [^:static [build [] io.dropwizard.auth.Authenticator] 
+     :methods [^:static [build [muon_clojure.server.Microservice] io.dropwizard.auth.Authenticator] 
               ])
 
 (defn clear-users! "should only exist for testing" []
@@ -61,13 +63,6 @@
   )
 )
 
-;(defn subscribe [mu]
-;  (let [ch (cl/with-muon mu (cl/subscribe! "stream://photon/stream"
-;                        :from 0
-;                        :stream-type "hot-cold"
-;                        :stream-name "authorised-user-events"))]
-;  (go (loop [elem (<!! ch)] (handle-streamed-event elem) (recur (<!! ch))))))
-
 (defn authenticate "Accepts dropwizard basic credentials and authenticates" [c]
   (log/info "authenticating user" (.getUsername c))
       (if (find-user (.getUsername c))
@@ -75,12 +70,6 @@
           (Optional/absent)
         )
       )
-
-(defn process-hot-channel 
-  "Expects two functions a no arg to create the channel and a single arg to handle events placed on the channel" 
-  [cf hf]
-  (let [ch (cf)]
-    (go (loop [elem (<!! ch)] (hf elem) (recur (<!! ch))))))
 
 
 (defn authorised-user-subscription [mu]
@@ -96,8 +85,8 @@
 (defn java-build
   "creates a authenticator"
   [mu]
-  (log/info "creating Authenticator")
-  (process-hot-channel (authorised-user-subscription mu) (handle-streamed-event))
+  (log/info "Creating Authenticator")
+  (pc/process-hot-channel (authorised-user-subscription mu) (handle-streamed-event))
   (reify io.dropwizard.auth.Authenticator 
     (^Optional authenticate [this c]
       (authenticate c)
